@@ -65,6 +65,9 @@ class _MyHomePageState extends State<MyHomePage> {
         case 1:
           page = FavoritesPage();
           break;
+        case 2:
+          page = AboutPage();
+          break;
         default:
           throw UnimplementedError('no widget for $selectedIndex');
       }
@@ -85,6 +88,10 @@ class _MyHomePageState extends State<MyHomePage> {
                     NavigationRailDestination(
                       icon: Icon(Icons.favorite),
                       label: Text('Favorites'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.contact_emergency),
+                      label: Text('About'),
                     ),
                   ],
                   selectedIndex: selectedIndex,
@@ -107,6 +114,7 @@ class _MyHomePageState extends State<MyHomePage> {
       }
     );
   }
+
 }
 
 
@@ -145,6 +153,13 @@ class GeneratorPage extends StatelessWidget {
                   appState.getNext();
                 },
                 child: Text('Next'),
+              ),
+              SizedBox(width: 10),
+              ElevatedButton(
+                onPressed: () {
+                  appState.getNext();
+                },
+                child: Text('None'),
               ),
             ],
           ),
@@ -208,6 +223,20 @@ class FavoritesPage extends StatelessWidget {
             title: Text(pair.asLowerCase),
           ),
       ],
+    );
+  }
+}
+class AboutPage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Text('''Name : Hakuna Matata private limited\n
+                  address : Some where on earth\n
+                  contact : 5th street, Atlantis the loss city\n
+                  why this text lines are not aligned ?
+                  : that's what i'm figuring out
+
+      '''),
     );
   }
 }

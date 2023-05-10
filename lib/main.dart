@@ -1,242 +1,704 @@
-import 'package:english_words/english_words.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter/services.dart';
+import 'help.dart';
 
-void main() {
-  runApp(MyApp());
-}
+void main() => runApp(const MenuBarApp());
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+/// A class for consolidating the definition of menu entries.
+///
+/// This sort of class is not required, but illustrates one way that defining
+/// menus could be done.
+class MenuEntry {
+  const MenuEntry(
+      {required this.label, this.shortcut, this.onPressed, this.menuChildren})
+      : assert(menuChildren == null || onPressed == null,
+            'onPressed is ignored if menuChildren are provided');
+  final String label;
 
-  @override
-  Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => MyAppState(),
-      child: MaterialApp(
-        title: 'Namer App',
-        theme: ThemeData(
-          useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(seedColor: Color.alphaBlend(Color.fromARGB
-            (245, 127, 202, 252), Color.fromARGB(145, 253, 67, 244))),
-        ),
-        home: MyHomePage(),
-      ),
-    );
-  }
-}
+  final MenuSerializableShortcut? shortcut;
+  final VoidCallback? onPressed;
+  final List<MenuEntry>? menuChildren;
 
-class MyAppState extends ChangeNotifier {
-  var current = WordPair.random();
-
-  // ↓ Add this.
-  void getNext() {
-    current = WordPair.random();
-    notifyListeners();
-  }
-    var favorites = <WordPair>[];
-
-  void toggleFavorite() {
-    if (favorites.contains(current)) {
-      favorites.remove(current);
-    } else {
-      favorites.add(current);
-    }
-    notifyListeners();
-  }
-}
-
-class MyHomePage extends StatefulWidget {
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  var selectedIndex = 0;
-
-  @override
-  Widget build(BuildContext context) {
-    Widget page;
-      switch (selectedIndex) {
-        case 0:
-          page = GeneratorPage();
-          break;
-        case 1:
-          page = FavoritesPage();
-          break;
-        case 2:
-          page = AboutPage();
-          break;
-        default:
-          throw UnimplementedError('no widget for $selectedIndex');
-      }
-
-    return LayoutBuilder(
-      builder: (context, Constraints) {
-        return Scaffold(
-          body: Row(
-            children: [
-              SafeArea(
-                child: NavigationRail(
-                  extended: Constraints.maxWidth >= 600,
-                  destinations: [
-                    NavigationRailDestination(
-                      icon: Icon(Icons.home),
-                      label: Text('Home'),
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.favorite),
-                      label: Text('Favorites'),
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.contact_emergency),
-                      label: Text('About'),
-                    ),
-                  ],
-                  selectedIndex: selectedIndex,
-                  onDestinationSelected: (value) {
-                    setState(() {
-                      selectedIndex = value;
-                    });
-                  },
-                ),
-              ),
-              Expanded(
-                child: Container(
-                  color: Theme.of(context).colorScheme.primaryContainer,
-                  child: page,
-                ),
-              ),
-            ],
-          ),
+  static List<Widget> build(List<MenuEntry> selections) {
+    Widget buildSelection(MenuEntry selection) {
+      if (selection.menuChildren != null) {
+        return SubmenuButton(
+          menuChildren: MenuEntry.build(selection.menuChildren!),
+          child: Text(selection.label),
         );
       }
+      return MenuItemButton(
+        shortcut: selection.shortcut,
+        onPressed: selection.onPressed,
+        child: Text(selection.label),
+      );
+    }
+
+    return selections.map<Widget>(buildSelection).toList();
+  }
+
+  static Map<MenuSerializableShortcut, Intent> shortcuts(
+      List<MenuEntry> selections) {
+    final Map<MenuSerializableShortcut, Intent> result =
+        <MenuSerializableShortcut, Intent>{};
+    for (final MenuEntry selection in selections) {
+      if (selection.menuChildren != null) {
+        result.addAll(MenuEntry.shortcuts(selection.menuChildren!));
+      } else {
+        if (selection.shortcut != null && selection.onPressed != null) {
+          result[selection.shortcut!] =
+              VoidCallbackIntent(selection.onPressed!);
+        }
+      }
+    }
+    return result;
+  }
+}
+
+class MyMenuBar extends StatefulWidget {
+  const MyMenuBar({
+    super.key,
+    required this.message,
+  });
+
+  final String message;
+
+  @override
+  State<MyMenuBar> createState() => _MyMenuBarState();
+}
+
+class _MyMenuBarState extends State<MyMenuBar> {
+  ShortcutRegistryEntry? _shortcutsEntry;
+  String? _lastSelection;
+
+  Color get backgroundColor => _backgroundColor;
+  Color _backgroundColor = Colors.red;
+  set backgroundColor(Color value) {
+    if (_backgroundColor != value) {
+      setState(() {
+        _backgroundColor = value;
+      });
+    }
+  }
+
+  bool get showingMessage => _showMessage;
+  bool _showMessage = false;
+  set showingMessage(bool value) {
+    if (_showMessage != value) {
+      setState(() {
+        _showMessage = value;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _shortcutsEntry?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: <Widget>[
+        Row(
+          mainAxisSize: MainAxisSize.max,
+          children: <Widget>[
+            Expanded(
+              flex: 0,
+              child: MenuBar(
+                children: MenuEntry.build(_getMenus()),
+              ),
+            ),
+            /**Expanded(
+              flex: 0,
+              child: MenuBar(
+                children: MenuEntry.build(_getMenus('Edit')),
+              ),
+            ),
+            Expanded(
+              flex: 0,
+              child: MenuBar(
+                children: MenuEntry.build(_getMenus('Selection')),
+              ),
+            ),
+            Expanded(
+              flex: 0,
+              child: MenuBar(
+                children: MenuEntry.build(_getMenus('View')),
+              ),
+            ),
+            Expanded(
+              flex: 0,
+              child: MenuBar(
+                children: MenuEntry.build(_getMenus('Tools')),
+              ),
+            ),
+            Expanded(
+              flex: 0,
+              child: MenuBar(
+                children: MenuEntry.build(_getMenus('Help')),
+              ),
+            ),
+            */
+          ],
+        ),
+        Expanded(
+          child: Container(
+            alignment: Alignment.center,
+            color: backgroundColor,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Text(
+                    showingMessage ? widget.message : '',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                ),
+                Text(_lastSelection != null
+                    ? 'Last Selected: $_lastSelection'
+                    : ''),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
-}
-
-
-class GeneratorPage extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    var appState = context.watch<MyAppState>();
-    var pair = appState.current;
-
-    IconData icon;
-    if (appState.favorites.contains(pair)) {
-      icon = Icons.favorite;
-    } else {
-      icon = Icons.favorite_border;
-    }
-
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          BigCard(pair: pair),
-          SizedBox(height: 10),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ElevatedButton.icon(
+  List<MenuEntry> _getMenus() {
+    final List<MenuEntry> result = <MenuEntry>[
+      MenuEntry(
+        label: 'file',
+        menuChildren: <MenuEntry>[
+          MenuEntry(
+            label: 'file description',
+            onPressed: () {
+              showAboutDialog(
+                context: context,
+                applicationName: 'MenuBar Sample',
+                applicationVersion: '1.0.0',
+              );
+              setState(() {
+                _lastSelection = 'About';
+              });
+            },
+          ),
+          MenuEntry(
+              label: 'Abo',
+              menuChildren: <MenuEntry>[MenuEntry(label: 'crow')]),
+          MenuEntry(
+            label: showingMessage ? 'Hide Message' : 'Show Message',
+            onPressed: () {
+              setState(() {
+                _lastSelection =
+                    showingMessage ? 'Hide Message' : 'Show Message';
+                showingMessage = !showingMessage;
+              });
+            },
+            shortcut:
+                const SingleActivator(LogicalKeyboardKey.keyS, control: true),
+          ),
+          // Hides the message, but is only enabled if the message isn't
+          // already hidden.
+          MenuEntry(
+            label: 'Reset Message',
+            onPressed: showingMessage
+                ? () {
+                    setState(() {
+                      _lastSelection = 'Reset Message';
+                      showingMessage = false;
+                    });
+                  }
+                : null,
+            shortcut: const SingleActivator(LogicalKeyboardKey.escape),
+          ),
+          MenuEntry(
+            label: 'Background Color',
+            menuChildren: <MenuEntry>[
+              MenuEntry(
+                label: 'Red Background',
                 onPressed: () {
-                  appState.toggleFavorite();
+                  setState(() {
+                    _lastSelection = 'Red Background';
+                    backgroundColor = Colors.red;
+                  });
                 },
-                icon: Icon(icon),
-                label: Text('Like'),
+                shortcut: const SingleActivator(LogicalKeyboardKey.keyR,
+                    control: true),
               ),
-              SizedBox(width: 10),
-              ElevatedButton(
+              MenuEntry(
+                label: 'Green Background',
                 onPressed: () {
-                  appState.getNext();
+                  setState(() {
+                    _lastSelection = 'Green Background';
+                    backgroundColor = Colors.green;
+                  });
                 },
-                child: Text('Next'),
+                shortcut: const SingleActivator(LogicalKeyboardKey.keyG,
+                    control: true),
               ),
-              SizedBox(width: 10),
-              ElevatedButton(
+              MenuEntry(
+                label: 'Blue Background',
                 onPressed: () {
-                  appState.getNext();
+                  setState(() {
+                    _lastSelection = 'Blue Background';
+                    backgroundColor = Colors.blue;
+                  });
                 },
-                child: Text('None'),
+                shortcut: const SingleActivator(LogicalKeyboardKey.keyB,
+                    control: true),
               ),
             ],
           ),
         ],
       ),
-    );
-  }
-}
-
-
-class BigCard extends StatelessWidget {
-  const BigCard({
-    super.key,
-    required this.pair,
-  });
-
-  final WordPair pair;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final style = theme.textTheme.displayMedium!.copyWith(
-      color: theme.colorScheme.onPrimary,
-    );
-
-    return Card(
-      color:theme.colorScheme.primary,
-      child: Padding(
-        padding: const EdgeInsets.all(50.0),
-        child: Text(
-          pair.asLowerCase,
-          style: style,
-          semanticsLabel: "${pair.first} ${pair.second}",
-        ),
-      ),
-    );
-  }
-}
-
-class FavoritesPage extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    var appState = context.watch<MyAppState>();
-
-    if (appState.favorites.isEmpty) {
-      return Center(
-        child: Text('No favorites yet.'),
-      );
-    }
-
-    return ListView(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(20),
-          child: Text('You have '
-              '${appState.favorites.length} favorites:'),
-        ),
-        for (var pair in appState.favorites)
-          ListTile(
-            leading: Icon(Icons.favorite),
-            title: Text(pair.asLowerCase),
+      MenuEntry(
+        label: 'edit',
+        menuChildren: <MenuEntry>[
+          MenuEntry(
+            label: 'option1',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => Contact()),
+              );
+              setState(() {
+                _lastSelection = 'About';
+              });
+            },
           ),
-      ],
-    );
+          MenuEntry(
+              label: 'Abo',
+              menuChildren: <MenuEntry>[MenuEntry(label: 'crow')]),
+          MenuEntry(
+            label: showingMessage ? 'Hide Message' : 'Show Message',
+            onPressed: () {
+              setState(() {
+                _lastSelection =
+                    showingMessage ? 'Hide Message' : 'Show Message';
+                showingMessage = !showingMessage;
+              });
+            },
+            shortcut:
+                const SingleActivator(LogicalKeyboardKey.keyS, control: true),
+          ),
+          // Hides the message, but is only enabled if the message isn't
+          // already hidden.
+          MenuEntry(
+            label: 'Reset Message',
+            onPressed: showingMessage
+                ? () {
+                    setState(() {
+                      _lastSelection = 'Reset Message';
+                      showingMessage = false;
+                    });
+                  }
+                : null,
+            shortcut: const SingleActivator(LogicalKeyboardKey.escape),
+          ),
+          MenuEntry(
+            label: 'Background Color',
+            menuChildren: <MenuEntry>[
+              MenuEntry(
+                label: 'Red Background',
+                onPressed: () {
+                  setState(() {
+                    _lastSelection = 'Red Background';
+                    backgroundColor = Colors.red;
+                  });
+                },
+                shortcut: const SingleActivator(LogicalKeyboardKey.keyR,
+                    control: true),
+              ),
+              MenuEntry(
+                label: 'Green Background',
+                onPressed: () {
+                  setState(() {
+                    _lastSelection = 'Green Background';
+                    backgroundColor = Colors.green;
+                  });
+                },
+                shortcut: const SingleActivator(LogicalKeyboardKey.keyG,
+                    control: true),
+              ),
+              MenuEntry(
+                label: 'Blue Background',
+                onPressed: () {
+                  setState(() {
+                    _lastSelection = 'Blue Background';
+                    backgroundColor = Colors.blue;
+                  });
+                },
+                shortcut: const SingleActivator(LogicalKeyboardKey.keyB,
+                    control: true),
+              ),
+            ],
+          ),
+        ],
+      ),
+      MenuEntry(
+        label: 'selection',
+        menuChildren: <MenuEntry>[
+          MenuEntry(
+            label: 'About',
+            onPressed: () {
+              showAboutDialog(
+                context: context,
+                applicationName: 'MenuBar Sample',
+                applicationVersion: '1.0.0',
+              );
+              setState(() {
+                _lastSelection = 'About';
+              });
+            },
+          ),
+          MenuEntry(
+              label: 'Abo',
+              menuChildren: <MenuEntry>[MenuEntry(label: 'crow')]),
+          MenuEntry(
+            label: showingMessage ? 'Hide Message' : 'Show Message',
+            onPressed: () {
+              setState(() {
+                _lastSelection =
+                    showingMessage ? 'Hide Message' : 'Show Message';
+                showingMessage = !showingMessage;
+              });
+            },
+            shortcut:
+                const SingleActivator(LogicalKeyboardKey.keyS, control: true),
+          ),
+          // Hides the message, but is only enabled if the message isn't
+          // already hidden.
+          MenuEntry(
+            label: 'Reset Message',
+            onPressed: showingMessage
+                ? () {
+                    setState(() {
+                      _lastSelection = 'Reset Message';
+                      showingMessage = false;
+                    });
+                  }
+                : null,
+            shortcut: const SingleActivator(LogicalKeyboardKey.escape),
+          ),
+          MenuEntry(
+            label: 'Background Color',
+            menuChildren: <MenuEntry>[
+              MenuEntry(
+                label: 'Red Background',
+                onPressed: () {
+                  setState(() {
+                    _lastSelection = 'Red Background';
+                    backgroundColor = Colors.red;
+                  });
+                },
+                shortcut: const SingleActivator(LogicalKeyboardKey.keyR,
+                    control: true),
+              ),
+              MenuEntry(
+                label: 'Green Background',
+                onPressed: () {
+                  setState(() {
+                    _lastSelection = 'Green Background';
+                    backgroundColor = Colors.green;
+                  });
+                },
+                shortcut: const SingleActivator(LogicalKeyboardKey.keyG,
+                    control: true),
+              ),
+              MenuEntry(
+                label: 'Blue Background',
+                onPressed: () {
+                  setState(() {
+                    _lastSelection = 'Blue Background';
+                    backgroundColor = Colors.blue;
+                  });
+                },
+                shortcut: const SingleActivator(LogicalKeyboardKey.keyB,
+                    control: true),
+              ),
+            ],
+          ),
+        ],
+      ),
+      MenuEntry(
+        label: 'view',
+        menuChildren: <MenuEntry>[
+          MenuEntry(
+            label: 'About',
+            onPressed: () {
+              showAboutDialog(
+                context: context,
+                applicationName: 'MenuBar Sample',
+                applicationVersion: '1.0.0',
+              );
+              setState(() {
+                _lastSelection = 'About';
+              });
+            },
+          ),
+          MenuEntry(
+              label: 'Abo',
+              menuChildren: <MenuEntry>[MenuEntry(label: 'crow')]),
+          MenuEntry(
+            label: showingMessage ? 'Hide Message' : 'Show Message',
+            onPressed: () {
+              setState(() {
+                _lastSelection =
+                    showingMessage ? 'Hide Message' : 'Show Message';
+                showingMessage = !showingMessage;
+              });
+            },
+            shortcut:
+                const SingleActivator(LogicalKeyboardKey.keyS, control: true),
+          ),
+          // Hides the message, but is only enabled if the message isn't
+          // already hidden.
+          MenuEntry(
+            label: 'Reset Message',
+            onPressed: showingMessage
+                ? () {
+                    setState(() {
+                      _lastSelection = 'Reset Message';
+                      showingMessage = false;
+                    });
+                  }
+                : null,
+            shortcut: const SingleActivator(LogicalKeyboardKey.escape),
+          ),
+          MenuEntry(
+            label: 'Background Color',
+            menuChildren: <MenuEntry>[
+              MenuEntry(
+                label: 'Red Background',
+                onPressed: () {
+                  setState(() {
+                    _lastSelection = 'Red Background';
+                    backgroundColor = Colors.red;
+                  });
+                },
+                shortcut: const SingleActivator(LogicalKeyboardKey.keyR,
+                    control: true),
+              ),
+              MenuEntry(
+                label: 'Green Background',
+                onPressed: () {
+                  setState(() {
+                    _lastSelection = 'Green Background';
+                    backgroundColor = Colors.green;
+                  });
+                },
+                shortcut: const SingleActivator(LogicalKeyboardKey.keyG,
+                    control: true),
+              ),
+              MenuEntry(
+                label: 'Blue Background',
+                onPressed: () {
+                  setState(() {
+                    _lastSelection = 'Blue Background';
+                    backgroundColor = Colors.blue;
+                  });
+                },
+                shortcut: const SingleActivator(LogicalKeyboardKey.keyB,
+                    control: true),
+              ),
+            ],
+          ),
+        ],
+      ),
+      MenuEntry(
+        label: 'tools',
+        menuChildren: <MenuEntry>[
+          MenuEntry(
+            label: 'About',
+            onPressed: () {
+              showAboutDialog(
+                context: context,
+                applicationName: 'MenuBar Sample',
+                applicationVersion: '1.0.0',
+              );
+              setState(() {
+                _lastSelection = 'About';
+              });
+            },
+          ),
+          MenuEntry(
+              label: 'Abo',
+              menuChildren: <MenuEntry>[MenuEntry(label: 'crow')]),
+          MenuEntry(
+            label: showingMessage ? 'Hide Message' : 'Show Message',
+            onPressed: () {
+              setState(() {
+                _lastSelection =
+                    showingMessage ? 'Hide Message' : 'Show Message';
+                showingMessage = !showingMessage;
+              });
+            },
+            shortcut:
+                const SingleActivator(LogicalKeyboardKey.keyS, control: true),
+          ),
+          // Hides the message, but is only enabled if the message isn't
+          // already hidden.
+          MenuEntry(
+            label: 'Reset Message',
+            onPressed: showingMessage
+                ? () {
+                    setState(() {
+                      _lastSelection = 'Reset Message';
+                      showingMessage = false;
+                    });
+                  }
+                : null,
+            shortcut: const SingleActivator(LogicalKeyboardKey.escape),
+          ),
+          MenuEntry(
+            label: 'Background Color',
+            menuChildren: <MenuEntry>[
+              MenuEntry(
+                label: 'Red Background',
+                onPressed: () {
+                  setState(() {
+                    _lastSelection = 'Red Background';
+                    backgroundColor = Colors.red;
+                  });
+                },
+                shortcut: const SingleActivator(LogicalKeyboardKey.keyR,
+                    control: true),
+              ),
+              MenuEntry(
+                label: 'Green Background',
+                onPressed: () {
+                  setState(() {
+                    _lastSelection = 'Green Background';
+                    backgroundColor = Colors.green;
+                  });
+                },
+                shortcut: const SingleActivator(LogicalKeyboardKey.keyG,
+                    control: true),
+              ),
+              MenuEntry(
+                label: 'Blue Background',
+                onPressed: () {
+                  setState(() {
+                    _lastSelection = 'Blue Background';
+                    backgroundColor = Colors.blue;
+                  });
+                },
+                shortcut: const SingleActivator(LogicalKeyboardKey.keyB,
+                    control: true),
+              ),
+            ],
+          ),
+        ],
+      ),
+      MenuEntry(
+        label: 'help',
+        menuChildren: <MenuEntry>[
+          MenuEntry(
+            label: 'About',
+            onPressed: () {
+              showAboutDialog(
+                context: context,
+                applicationName: 'MenuBar Sample',
+                applicationVersion: '1.0.0',
+              );
+              setState(() {
+                _lastSelection = 'About';
+              });
+            },
+          ),
+          MenuEntry(
+              label: 'Abo',
+              menuChildren: <MenuEntry>[MenuEntry(label: 'crow')]),
+          MenuEntry(
+            label: showingMessage ? 'Hide Message' : 'Show Message',
+            onPressed: () {
+              setState(() {
+                _lastSelection =
+                    showingMessage ? 'Hide Message' : 'Show Message';
+                showingMessage = !showingMessage;
+              });
+            },
+            shortcut:
+                const SingleActivator(LogicalKeyboardKey.keyS, control: true),
+          ),
+          // Hides the message, but is only enabled if the message isn't
+          // already hidden.
+          MenuEntry(
+            label: 'Reset Message',
+            onPressed: showingMessage
+                ? () {
+                    setState(() {
+                      _lastSelection = 'Reset Message';
+                      showingMessage = false;
+                    });
+                  }
+                : null,
+            shortcut: const SingleActivator(LogicalKeyboardKey.escape),
+          ),
+          MenuEntry(
+            label: 'Background Color',
+            menuChildren: <MenuEntry>[
+              MenuEntry(
+                label: 'Red Background',
+                onPressed: () {
+                  setState(() {
+                    _lastSelection = 'Red Background';
+                    backgroundColor = Colors.red;
+                  });
+                },
+                shortcut: const SingleActivator(LogicalKeyboardKey.keyR,
+                    control: true),
+              ),
+              MenuEntry(
+                label: 'Green Background',
+                onPressed: () {
+                  setState(() {
+                    _lastSelection = 'Green Background';
+                    backgroundColor = Colors.green;
+                  });
+                },
+                shortcut: const SingleActivator(LogicalKeyboardKey.keyG,
+                    control: true),
+              ),
+              MenuEntry(
+                label: 'Blue Background',
+                onPressed: () {
+                  setState(() {
+                    _lastSelection = 'Blue Background';
+                    backgroundColor = Colors.blue;
+                  });
+                },
+                shortcut: const SingleActivator(LogicalKeyboardKey.keyB,
+                    control: true),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ];
+    // (Re-)register the shortcuts with the ShortcutRegistry so that they are
+    // available to the entire application, and update them if they've changed.
+
+    _shortcutsEntry?.dispose();
+    _shortcutsEntry =
+        ShortcutRegistry.of(context).addAll(MenuEntry.shortcuts(result));
+    return result;
   }
 }
-class AboutPage extends StatelessWidget {
+
+class MenuBarApp extends StatelessWidget {
+  const MenuBarApp({super.key});
+
+  static const String kMessage = '"Talk less. Smile more." - A. Burr';
+
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Text('''Name : Hakuna Matata private limited\n
-                  address : Some where on earth\n
-                  contact : 5th street, Atlantis the loss city\n
-                  why this text lines are not aligned ?
-                  : that's what i'm figuring out
-
-      '''),
+    return const MaterialApp(
+      home: Scaffold(body: MyMenuBar(message: kMessage)),
     );
   }
 }

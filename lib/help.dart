@@ -5,11 +5,17 @@ class Contact extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Text('''Name : Hakuna Matata private limited\n
-                  address : Some where on earth\n
-                  contact : 5th street, Atlantis the loss city\n
-                  why this text lines are not aligned ?
-                  : that's what i'm figuring out
+      child: Text('''this is option 1 page
+
+      '''),
+    );
+  }
+}
+class Option2 extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Text('''this is option2 page
 
       '''),
     );

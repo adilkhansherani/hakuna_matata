@@ -598,12 +598,11 @@ class _MyMenuBarState extends State<MyMenuBar> {
         label: 'help',
         menuChildren: <MenuEntry>[
           MenuEntry(
-            label: 'About',
+            label: 'option1',
             onPressed: () {
-              showAboutDialog(
-                context: context,
-                applicationName: 'MenuBar Sample',
-                applicationVersion: '1.0.0',
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => Contact()),
               );
               setState(() {
                 _lastSelection = 'About';
@@ -612,35 +611,16 @@ class _MyMenuBarState extends State<MyMenuBar> {
           ),
           MenuEntry(
               label: 'Abo',
-              menuChildren: <MenuEntry>[MenuEntry(label: 'crow')]),
-          MenuEntry(
-            label: showingMessage ? 'Hide Message' : 'Show Message',
-            onPressed: () {
-              setState(() {
-                _lastSelection =
-                    showingMessage ? 'Hide Message' : 'Show Message';
-                showingMessage = !showingMessage;
-              });
-            },
-            shortcut:
-                const SingleActivator(LogicalKeyboardKey.keyS, control: true),
-          ),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => Option2()),
+                );
+              }),
           // Hides the message, but is only enabled if the message isn't
           // already hidden.
           MenuEntry(
-            label: 'Reset Message',
-            onPressed: showingMessage
-                ? () {
-                    setState(() {
-                      _lastSelection = 'Reset Message';
-                      showingMessage = false;
-                    });
-                  }
-                : null,
-            shortcut: const SingleActivator(LogicalKeyboardKey.escape),
-          ),
-          MenuEntry(
-            label: 'Background Color',
+            label: 'option3',
             menuChildren: <MenuEntry>[
               MenuEntry(
                 label: 'Red Background',
